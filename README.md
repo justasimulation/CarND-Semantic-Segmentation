@@ -70,7 +70,7 @@ The result validation recall:
 ### Test images
 
 Test data is unlabeled so only visual estimation can be done.
-It looks like the model does descent job pretty often.
+It looks like the model does decent job pretty often.
 
 ![](images/um_000014.png)
 ![](images/umm_000035.png)
