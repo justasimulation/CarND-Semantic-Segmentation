@@ -106,7 +106,7 @@ I used 3 video files from the previous projects.
 
 [First video file original](data/video/solidWhiteRight.mp4)
 
-[First video file result](runs/0/processed_video/solidWhiteRight.mp4)
+[First video file result](runs/0/video/processed_solidWhiteRight.mp4)
 
 In general the model is able to find the road and separate it from other
 cars, but there is some problem at the bottom of the image. May be it has
