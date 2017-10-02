@@ -104,7 +104,9 @@ Sometimes it is just very bad result
 Video results are much worse.
 I used 3 video files from the previous projects.
 
-[First video file](file://../data/video/solidWhiteRight.mp4)
+[First video file original](data/video/solidWhiteRight.mp4)
+
+[First video file result](runs/0/video/solidWhiteRight.mp4)
 
 In general the model is able to find the road and separate it from other
 cars, but there is some problem at the bottom of the image. May be it has
@@ -112,7 +114,9 @@ something to do with different camera angle or some kind of reflection at the bo
 
 ![](images/image_132.png)
 
-[Second video file](file://../data/video/challenge_video.mp4)
+[Second video file original](data/video/challenge_video.mp4)
+
+[Second video file result](runs/0/video/challenge_video.mp4)
 
 The same result and the same problem. In general the model is able to find
 the road and background, but at the bottom fails. In addition to that it
@@ -124,7 +128,9 @@ error.
 ![](images/image_128.png)
 ![](images/image_196.png)
 
-[Third video file](file://../data/video/harder_challenge_video.mp4)
+[Third video file original](data/video/harder_challenge_video.mp4)
+
+[Third video file result](runs/0/video/harder_challenge_video.mp4)
 
 Here the result is the worst. Most of the time the model fails. Again a reflection
 can be seen at the bottom of the images.
