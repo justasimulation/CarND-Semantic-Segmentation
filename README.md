@@ -5,6 +5,12 @@
 Need to label road pixels.
 Road classification recall and background classification recall should be at least 80%.
 
+### Build instructions
+
+1. Download [Kitti dataset](http://www.cvlibs.net/datasets/kitti/eval_road.php)
+2. Extract the dataset to `data` folder so there is a path `data/data_road`
+3. Run `python main.py`
+
 ### Dataset
 Kitti Road dataset is used. It consists of 289 training labeled images
 and 290 testing unlabled images. 
