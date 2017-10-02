@@ -25,7 +25,7 @@ POOL3_INIT_STD          = 1e-4
 REG_SCALE     = 5e-4
 
 NUM_SAMPLES = 1000
-NUM_EPOCHS  = 100
+NUM_EPOCHS  = 200
 BATCH_SIZE  = 40
 # number of labeled classes, currently: background, road
 NUM_CLASSES = 2
@@ -154,11 +154,13 @@ def optimize(nn_last_layer, correct_label, learning_rate, num_classes):
     labels_one_hot = tf.reshape(correct_label, (-1, num_classes))
 
     loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=logits, labels=labels_one_hot))
+    loss += tf.reduce_sum(tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES))
+
     train_op = tf.train.AdamOptimizer(learning_rate=learning_rate, epsilon=ADAM_EPS).minimize(loss)
 
     return logits, train_op, loss
 
-tests.test_optimize(optimize)
+#tests.test_optimize(optimize)
 
 
 def train_nn(sess, epochs, batch_size, get_batches_fn, train_op, cross_entropy_loss, input_image,
@@ -192,7 +194,7 @@ def train_nn(sess, epochs, batch_size, get_batches_fn, train_op, cross_entropy_l
         sample_count = 0
 
         for image, label in get_batches_fn(batch_size):
-            _, loss, _, r, = sess.run([train_op, cross_entropy_loss, recall_op, recall],
+            _, loss, _, r = sess.run([train_op, cross_entropy_loss, recall_op, recall],
                                       feed_dict={input_image: image,
                                                  correct_label: label,
                                                  learning_rate: LEARNING_RATE,
