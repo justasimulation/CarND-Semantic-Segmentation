@@ -139,13 +139,14 @@ def layers(pool3_out, pool4_out, fc7_conv_out, keep_prob, num_classes):
 #tests.test_layers(layers)
 
 
-def optimize(nn_last_layer, correct_label, learning_rate, num_classes):
+def optimize(nn_last_layer, correct_label, learning_rate, num_classes, is_training):
     """
     Build the TensorFLow loss and optimizer operations.
     :param nn_last_layer: TF Tensor of the last layer in the neural network
     :param correct_label: TF Placeholder for the correct label image
     :param learning_rate: TF Placeholder for the learning rate
     :param num_classes: Number of classes to classify
+    :param is_training: Specifies whether there is a need to add regularization loss
     :return: Tuple of (logits, train_op, cross_entropy_loss)
     """
     # TODO: Implement function
@@ -154,7 +155,9 @@ def optimize(nn_last_layer, correct_label, learning_rate, num_classes):
     labels_one_hot = tf.reshape(correct_label, (-1, num_classes))
 
     loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=logits, labels=labels_one_hot))
-    loss += tf.reduce_sum(tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES))
+
+    if is_training:
+        loss += tf.reduce_sum(tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES))
 
     train_op = tf.train.AdamOptimizer(learning_rate=learning_rate, epsilon=ADAM_EPS).minimize(loss)
 
@@ -306,7 +309,8 @@ def run():
 
         layer_output = layers(pool3_out, pool4_out, fc7_conv_out, keep_prob,NUM_CLASSES)
 
-        logits, train_op, loss = optimize(layer_output, labels, learning_rate, NUM_CLASSES)
+        # create optimization ops for training with regularization
+        logits, train_op, loss = optimize(layer_output, labels, learning_rate, NUM_CLASSES, True)
 
         recall, recall_op = tf.metrics.recall(tf.argmax(tf.reshape(labels, (-1, NUM_CLASSES)), 1), tf.argmax(logits, 1))
 
@@ -320,6 +324,9 @@ def run():
         train_nn(sess=sess, epochs=NUM_EPOCHS, batch_size=BATCH_SIZE, get_batches_fn=get_batches_fn_augmented,
                  train_op=train_op, cross_entropy_loss=loss, input_image=input_image, correct_label=labels,
                  keep_prob=keep_prob, learning_rate=learning_rate, recall=recall, recall_op=recall_op)
+
+        # create optimization ops for testing without regularization
+        logits, train_op, loss = optimize(layer_output, labels, learning_rate, NUM_CLASSES, False)
 
         evaluate_nn(sess=sess, batch_size=BATCH_SIZE, get_batches_fn=get_batches_fn_test, cross_entropy_loss=loss,
                     input_image=input_image, correct_label=labels, logits=logits, keep_prob=keep_prob,
