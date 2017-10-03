@@ -27,6 +27,9 @@ REG_SCALE     = 5e-4
 NUM_SAMPLES = 1000
 NUM_EPOCHS  = 200
 BATCH_SIZE  = 40
+
+#validation will be done after this many epochs
+EAVLUATE_EPOCHS = 10
 # number of labeled classes, currently: background, road
 NUM_CLASSES = 2
 
@@ -79,8 +82,6 @@ def load_vgg(sess, vgg_path):
     fc7_conv_out    = graph.get_tensor_by_name(vgg_fc7_conv_out)
 
     return image_input, keep_prob, pool3_out, pool4_out, fc7_conv_out
-
-tests.test_load_vgg(load_vgg, tf)
 
 
 def layers(pool3_out, pool4_out, fc7_conv_out, keep_prob, num_classes):
@@ -136,10 +137,8 @@ def layers(pool3_out, pool4_out, fc7_conv_out, keep_prob, num_classes):
 
     return upsample_4_7_3x8
 
-#tests.test_layers(layers)
 
-
-def optimize(nn_last_layer, correct_label, learning_rate, num_classes, is_training):
+def optimize(nn_last_layer, correct_label, learning_rate, num_classes):
     """
     Build the TensorFLow loss and optimizer operations.
     :param nn_last_layer: TF Tensor of the last layer in the neural network
@@ -147,45 +146,48 @@ def optimize(nn_last_layer, correct_label, learning_rate, num_classes, is_traini
     :param learning_rate: TF Placeholder for the learning rate
     :param num_classes: Number of classes to classify
     :param is_training: Specifies whether there is a need to add regularization loss
-    :return: Tuple of (logits, train_op, cross_entropy_loss)
+    :return: Tuple of (logits, train_op, train loss, validation loss)
     """
     # TODO: Implement function
 
     logits = tf.reshape(nn_last_layer, (-1, num_classes))
     labels_one_hot = tf.reshape(correct_label, (-1, num_classes))
 
-    loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=logits, labels=labels_one_hot))
+    val_loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=logits, labels=labels_one_hot))
 
-    if is_training:
-        loss += tf.reduce_sum(tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES))
+    train_loss = val_loss + tf.reduce_sum(tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES))
 
-    train_op = tf.train.AdamOptimizer(learning_rate=learning_rate, epsilon=ADAM_EPS).minimize(loss)
+    train_op = tf.train.AdamOptimizer(learning_rate=learning_rate, epsilon=ADAM_EPS).minimize(train_loss)
 
-    return logits, train_op, loss
-
-#tests.test_optimize(optimize)
+    return logits, train_op, train_loss, val_loss
 
 
-def train_nn(sess, epochs, batch_size, get_batches_fn, train_op, cross_entropy_loss, input_image,
-             correct_label, keep_prob, learning_rate, recall, recall_op):
+def train_nn(sess, epochs, batch_size, get_batches_train_fn, get_batches_val_fn,
+             train_op, train_loss, val_loss, input_image,
+             correct_label, keep_prob, learning_rate, logits, num_classes):
     """
     Train neural network and print out the loss during training.
     :param sess: TF Session
     :param epochs: Number of epochs
     :param batch_size: Batch size
-    :param get_batches_fn: Function to get batches of training data.  Call using get_batches_fn(batch_size)
+    :param get_batches_train_fn: Function to get batches of training data.  Call using get_batches_train_fn(batch_size)
+    :param get_batches_val_fn: Function to get batches of validation data.  Call using get_batches_val_fn(batch_size)
     :param train_op: TF Operation to train the neural network
-    :param cross_entropy_loss: TF Tensor for the amount of loss
+    :param train_loss: TF Tensor for the amount of loss during training
+    :param val_loss: TF Tensor for the amount of loss during validation
     :param input_image: TF Placeholder for input images
     :param correct_label: TF Placeholder for label images
     :param keep_prob: TF Placeholder for dropout keep probability
     :param learning_rate: TF Placeholder for learning rate
-    :param recall: TF Tensor for recall
-    :param recall_op: TF Operation for recall
+    :param logits: TF Tensor logits
+    :param num_classes: number of classification classes
     """
     # TODO: Implement function
     start_time = time.time()
-    last_time = start_time
+
+    recall, recall_op = tf.metrics.recall(tf.argmax(tf.reshape(correct_label, (-1, num_classes)), 1), tf.argmax(logits, 1))
+
+    sess.run(tf.local_variables_initializer())
 
     print()
     print("Training...")
@@ -193,29 +195,59 @@ def train_nn(sess, epochs, batch_size, get_batches_fn, train_op, cross_entropy_l
 
     for epoch in range(epochs):
 
-        batch_count = 0
-        sample_count = 0
+        train_nn_epoch(epoch=epoch, sess=sess, batch_size=batch_size, get_batches_fn=get_batches_train_fn,
+                       train_op=train_op, loss=train_loss, recall=recall, recall_op=recall_op,
+                       input_image=input_image, correct_label=correct_label,
+                       learning_rate=learning_rate, keep_prob=keep_prob)
 
-        for image, label in get_batches_fn(batch_size):
-            _, loss, _, r = sess.run([train_op, cross_entropy_loss, recall_op, recall],
-                                      feed_dict={input_image: image,
-                                                 correct_label: label,
-                                                 learning_rate: LEARNING_RATE,
-                                                 keep_prob: KEEP_PROB})
-            cur_time = time.time()
-            batch_count += 1
-            sample_count += image.shape[0]
+        if (epoch + 1) % EAVLUATE_EPOCHS == 0:
+            evaluate_nn(sess, batch_size, get_batches_val_fn, val_loss,
+                        input_image, correct_label, logits, keep_prob, num_classes)
 
-            print("Epoch: {}, Batch: {:02d}, Loss: {:.3f}, Recall: {:.3f}, Time: {:.3f}".format(epoch,
-                                                                                                batch_count,
-                                                                                                loss,
-                                                                                                r,
-                                                                                                cur_time - last_time))
-            last_time = cur_time
+    print("Final evaluation...")
+    evaluate_nn(sess, batch_size, get_batches_val_fn, val_loss,
+                input_image, correct_label, logits, keep_prob, num_classes)
 
     print("Overall time: {:.3f}".format(time.time() - start_time))
 
-#tests.test_train_nn(train_nn)
+
+def train_nn_epoch(epoch, sess, batch_size, get_batches_fn, train_op, loss, recall, recall_op, input_image, correct_label,
+                   learning_rate, keep_prob):
+    """
+    Performs training of one epoch
+    :param epoch: epoch number
+    :param sess: tf session
+    :param batch_size: batch size
+    :param get_batches_fn: train samples generator
+    :param train_op: tf train operation
+    :param loss: tf loss tensor
+    :param recall: tf recall tensor
+    :param recall_op: tf recall operation
+    :param input_image: tf placeholder for images
+    :param correct_label: tf placeholder for labels
+    :param learning_rate: tf placeholder for learning rate
+    :param keep_prob: tf placeholder for keep probability
+    """
+    last_time = time.time()
+    batch_count = 0
+    sample_count = 0
+
+    for image, label in get_batches_fn(batch_size):
+        _, loss_val, _, recall_val = sess.run([train_op, loss, recall_op, recall],
+                                              feed_dict={input_image: image,
+                                                         correct_label: label,
+                                                         learning_rate: LEARNING_RATE,
+                                                         keep_prob: KEEP_PROB})
+        cur_time = time.time()
+        batch_count += 1
+        sample_count += image.shape[0]
+
+        print("Epoch: {}, Batch: {:02d}, Loss: {:.3f}, Recall: {:.3f}, Time: {:.3f}".format(epoch,
+                                                                                            batch_count,
+                                                                                            loss_val,
+                                                                                            recall_val,
+                                                                                            cur_time - last_time))
+        last_time = cur_time
 
 
 def evaluate_nn(sess, batch_size, get_batches_fn, cross_entropy_loss, input_image,
@@ -274,7 +306,7 @@ def evaluate_nn(sess, batch_size, get_batches_fn, cross_entropy_loss, input_imag
           format(total_background_recall/sample_count, total_road_recall/sample_count))
     print("Min values: background recall: {:.3f}, road recall: {:.3f}".
           format(min_background_recall, min_road_recall))
-    print("Overall time: {:.3f}".format(time.time() - start_time))
+    print("Overall time: {:.3f}\n".format(time.time() - start_time))
 
 
 def run():
@@ -297,7 +329,7 @@ def run():
         #  https://datascience.stackexchange.com/questions/5224/how-to-prepare-augment-images-for-neural-network
 
         get_batches_fn_augmented, \
-        get_batches_fn_test = helper.gen_augmented_batch_function(os.path.join(DATA_DIR, TRAINING_DIR),
+        get_batches_fn_val = helper.gen_augmented_batch_function(os.path.join(DATA_DIR, TRAINING_DIR),
                                                                   IMAGE_SHAPE, NUM_SAMPLES)
 
         # TODO: Build NN using load_vgg, layers, and optimize function
@@ -309,28 +341,19 @@ def run():
 
         layer_output = layers(pool3_out, pool4_out, fc7_conv_out, keep_prob,NUM_CLASSES)
 
-        # create optimization ops for training with regularization
-        logits, train_op, loss = optimize(layer_output, labels, learning_rate, NUM_CLASSES, True)
-
-        recall, recall_op = tf.metrics.recall(tf.argmax(tf.reshape(labels, (-1, NUM_CLASSES)), 1), tf.argmax(logits, 1))
+        logits, train_op, train_loss, val_loss = optimize(layer_output, labels, learning_rate, NUM_CLASSES)
 
         # TODO: Train NN using the train_nn function
 
-        sess.run(tf.global_variables_initializer())
-        sess.run(tf.local_variables_initializer())
-
         saver = tf.train.Saver()
 
-        train_nn(sess=sess, epochs=NUM_EPOCHS, batch_size=BATCH_SIZE, get_batches_fn=get_batches_fn_augmented,
-                 train_op=train_op, cross_entropy_loss=loss, input_image=input_image, correct_label=labels,
-                 keep_prob=keep_prob, learning_rate=learning_rate, recall=recall, recall_op=recall_op)
+        sess.run(tf.global_variables_initializer())
 
-        # create optimization ops for testing without regularization
-        logits, train_op, loss = optimize(layer_output, labels, learning_rate, NUM_CLASSES, False)
-
-        evaluate_nn(sess=sess, batch_size=BATCH_SIZE, get_batches_fn=get_batches_fn_test, cross_entropy_loss=loss,
-                    input_image=input_image, correct_label=labels, logits=logits, keep_prob=keep_prob,
-                    num_classes=NUM_CLASSES)
+        train_nn(sess=sess, epochs=NUM_EPOCHS, batch_size=BATCH_SIZE,
+                 get_batches_train_fn=get_batches_fn_augmented, get_batches_val_fn=get_batches_fn_val,
+                 train_op=train_op, train_loss=train_loss, val_loss=val_loss, input_image=input_image,
+                 correct_label=labels, keep_prob=keep_prob, learning_rate=learning_rate,
+                 logits=logits, num_classes=NUM_CLASSES)
 
         # TODO: Save inference data using helper.save_inference_samples
         output_dir = helper.create_output_dir(RUNS_DIR)
